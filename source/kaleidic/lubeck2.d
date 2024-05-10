@@ -2136,18 +2136,20 @@ Slice!(RCI!T, 2) pinv
 @safe pure
 unittest
 {
-    import std.math : isClose;
-    auto A = iota(15).as!double.sliced(3,5);
+    import mir.algorithm.iteration: equal;
+    import mir.math.common: approxEqual;
+    import mir.ndslice.slice: sliced;
+    import mir.ndslice.topology: iota, as;
+
+    auto A = iota([15], 1).as!double.sliced(3,5);
 
     auto A_pinv = pinv(A);
 
     auto A1 = mtimes(A, mtimes(A_pinv, A));
     auto A2 = mtimes(A_pinv, mtimes(A, A_pinv));
 
-    auto boolMat = zip(A1, A2).filter!(pair => pair.a.isClose(pair.b));
-    boolMat.all!(aa => aa == true);
-
-    assert(boolMat.all!(aa => aa == true), "Pseudo-inverse property failed");
+    assert(A.equal!approxEqual(A1));
+    assert(A_pinv.equal!approxEqual(A2));
 }
 ///complex extensions
 
