@@ -2096,7 +2096,7 @@ Slice!(RCI!T, 2)
 
     if(lowApiExecuted)
     {
-        enum msg = (algorithm == "gesvd" ? "pinv: svd: DBDSDC did not converge, updating process failed" : "pinv: svd: DBDSQR did not converge");
+        enum msg ="pinv: pinv was not successful due to a convergence issue during SVD calculation.";
         assert(!info,  msg);
     }
 
