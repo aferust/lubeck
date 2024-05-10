@@ -1217,13 +1217,41 @@ Params:
 out result = $(LREF SvdResult). ]
 Returns: error code from CBlas
 +/
-@safe pure @nogc nothrow SvdResult!T svd
+@safe pure @nogc SvdResult!T svd
 (
     T,
     string algorithm = "gesvd",
     SliceKind kind,
 )(
     Slice!(const(T)*, 2, kind) a,
+    Flag!"slim" slim = No.slim,
+)
+    if (algorithm == "gesvd" || algorithm == "gesdd")
+{
+    
+    size_t info;
+    bool lowApiExecuted;
+
+    auto svdresult = svdImpl!(T, algorithm, kind)(a, info, lowApiExecuted, slim);
+    
+    if(lowApiExecuted)
+    {
+        enum msg = (algorithm == "gesvd" ? "svd: DBDSDC did not converge, updating process failed" : "svd: DBDSQR did not converge");
+        enforce!("svd: " ~ msg)(!info);
+    }
+
+    return SvdResult!T(svdresult.vt, svdresult.s, svdresult.u); //transposed
+}
+
+@safe pure @nogc nothrow SvdResult!T svdImpl
+(
+    T,
+    string algorithm = "gesvd",
+    SliceKind kind,
+)(
+    auto ref const Slice!(const(T)*, 2, kind) a,
+    out size_t infoResult,
+    out bool lowApiExecuted,
     Flag!"slim" slim = No.slim,
 )
     if (algorithm == "gesvd" || algorithm == "gesdd")
@@ -1241,9 +1269,11 @@ Returns: error code from CBlas
         u.lightScope.diagonal[] = 1;
         vt.lightScope[] = 0;
         vt.lightScope.diagonal[] = 1;
+        lowApiExecuted = false;
     }
     else
     {
+        lowApiExecuted = true;
         static if (algorithm == "gesvd")
         {
             auto jobu = slim ? 'S' : 'A';
@@ -1278,11 +1308,9 @@ Returns: error code from CBlas
             } else {
                 auto info = gesdd!T(jobz, rca, s.lightScope, u.lightScope, vt.lightScope, work, iwork);
             }
+
+            infoResult = info;
         }
-        enum msg = (algorithm == "gesvd" ? "svd: DBDSDC did not converge, updating process failed" : "svd: DBDSQR did not converge");
-        
-        try enforce!("svd: " ~ msg)(!info);
-        catch(Exception e) assert(false, e.msg);
     }
     return SvdResult!T(vt, s, u); //transposed
 }
@@ -2061,7 +2089,17 @@ Slice!(RCI!T, 2)
     import mir.algorithm.iteration: find, each;
     import std.math: nextUp;
 
-    auto svd = svd(matrix);
+    size_t info;
+    bool lowApiExecuted;
+
+    auto svd = svdImpl(matrix, info, lowApiExecuted);
+
+    if(lowApiExecuted)
+    {
+        enum msg = (algorithm == "gesvd" ? "pinv: svd: DBDSDC did not converge, updating process failed" : "pinv: svd: DBDSQR did not converge");
+        assert(!info,  msg);
+    }
+
     if (tolerance != tolerance)
     {
         auto n = svd.sigma.front;
@@ -2095,6 +2133,22 @@ Slice!(RCI!T, 2) pinv
     return pinv(matrixScope, tolerance); 
 }
 
+@safe pure
+unittest
+{
+    import std.math : isClose;
+    auto A = iota(15).as!double.sliced(3,5);
+
+    auto A_pinv = pinv(A);
+
+    auto A1 = mtimes(A, mtimes(A_pinv, A));
+    auto A2 = mtimes(A_pinv, mtimes(A, A_pinv));
+
+    auto boolMat = zip(A1, A2).filter!(pair => pair.a.isClose(pair.b));
+    boolMat.all!(aa => aa == true);
+
+    assert(boolMat.all!(aa => aa == true), "Pseudo-inverse property failed");
+}
 ///complex extensions
 
 private T conj(T)(
