@@ -1217,7 +1217,7 @@ Params:
 out result = $(LREF SvdResult). ]
 Returns: error code from CBlas
 +/
-@safe pure @nogc SvdResult!T svd
+@safe pure @nogc nothrow SvdResult!T svd
 (
     T,
     string algorithm = "gesvd",
@@ -1280,12 +1280,14 @@ Returns: error code from CBlas
             }
         }
         enum msg = (algorithm == "gesvd" ? "svd: DBDSDC did not converge, updating process failed" : "svd: DBDSQR did not converge");
-        enforce!("svd: " ~ msg)(!info);
+        
+        try enforce!("svd: " ~ msg)(!info);
+        catch(Exception e) assert(false, e.msg);
     }
     return SvdResult!T(vt, s, u); //transposed
 }
 
-@safe pure SvdResult!T svd
+@safe pure @nogc nothrow SvdResult!T svd
 (
     T,
     string algorithm = "gesvd",
@@ -2042,6 +2044,55 @@ unittest
     assert(equal!approxEqual(res.eigenvectors, coeff));
     assert(equal!approxEqual(res.scores, score));
     assert(equal!approxEqual(res.eigenvalues, eigenvalues));
+}
+
+/++
+Computes Moore-Penrose pseudoinverse of matrix.
+
+Params:
+    matrix = Input `M x N` matrix.
+    tolerance = The computation is based on SVD and any singular values less than tolerance are treated as zero.
+Returns: Moore-Penrose pseudoinverse matrix
++/
+@safe pure @nogc nothrow
+Slice!(RCI!T, 2)
+    pinv(T, SliceKind kind)(Slice!(const(T)*, 2, kind) matrix, double tolerance = double.nan)
+{
+    import mir.algorithm.iteration: find, each;
+    import std.math: nextUp;
+
+    auto svd = svd(matrix);
+    if (tolerance != tolerance)
+    {
+        auto n = svd.sigma.front;
+        auto eps = n.nextUp - n;
+        tolerance = max(matrix.length!0, matrix.length!1) * eps;
+    }
+    auto st = svd.sigma.find!(a => !(a >= tolerance));
+    static if (is(typeof(st) : sizediff_t))
+        alias si = st;
+    else
+        auto si = st[0];
+    auto s = svd.sigma[0 .. $ - si];
+    s.each!"a = 1 / a";
+    svd.vt[0 .. s.length].pack!1.map!"a".zip(s).each!"a.a[] *= a.b";
+    auto v = svd.vt[0 .. s.length].universal.transposed;
+    auto ut = svd.u.universal.transposed[0 .. s.length];
+    return v.mtimes(ut);
+}
+
+@safe pure @nogc nothrow
+Slice!(RCI!T, 2) pinv
+(
+    T,
+    SliceKind kind,
+)(
+    auto ref scope const Slice!(RCI!T,2,kind) matrix,
+    double tolerance = double.nan
+)
+{
+    auto matrixScope = matrix.lightScope.lightConst;
+    return pinv(matrixScope, tolerance); 
 }
 
 ///complex extensions
