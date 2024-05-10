@@ -1240,7 +1240,7 @@ Returns: error code from CBlas
         enforce!("svd: " ~ msg)(!info);
     }
 
-    return SvdResult!T(svdresult.vt, svdresult.s, svdresult.u); //transposed
+    return svdresult; //transposed
 }
 
 @safe pure @nogc nothrow SvdResult!T svdImpl
