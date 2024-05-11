@@ -1230,15 +1230,10 @@ Returns: error code from CBlas
 {
     
     size_t info;
-    bool lowApiExecuted;
-
-    auto svdresult = svdImpl!(T, algorithm, kind)(a, info, lowApiExecuted, slim);
+    auto svdresult = svdImpl!(T, algorithm, kind)(a, info, slim);
     
-    if(lowApiExecuted)
-    {
-        enum msg = (algorithm == "gesvd" ? "svd: DBDSDC did not converge, updating process failed" : "svd: DBDSQR did not converge");
-        enforce!("svd: " ~ msg)(!info);
-    }
+    enum msg = (algorithm == "gesvd" ? "svd: DBDSDC did not converge, updating process failed" : "svd: DBDSQR did not converge");
+    enforce!("svd: " ~ msg)(!info);
 
     return svdresult; //transposed
 }
@@ -1251,7 +1246,6 @@ Returns: error code from CBlas
 )(
     auto ref const Slice!(const(T)*, 2, kind) a,
     out size_t infoResult,
-    out bool lowApiExecuted,
     Flag!"slim" slim = No.slim,
 )
     if (algorithm == "gesvd" || algorithm == "gesdd")
@@ -1269,11 +1263,9 @@ Returns: error code from CBlas
         u.lightScope.diagonal[] = 1;
         vt.lightScope[] = 0;
         vt.lightScope.diagonal[] = 1;
-        lowApiExecuted = false;
     }
     else
     {
-        lowApiExecuted = true;
         static if (algorithm == "gesvd")
         {
             auto jobu = slim ? 'S' : 'A';
@@ -1308,9 +1300,8 @@ Returns: error code from CBlas
             } else {
                 auto info = gesdd!T(jobz, rca, s.lightScope, u.lightScope, vt.lightScope, work, iwork);
             }
-
-            infoResult = info;
         }
+        infoResult = info;
     }
     return SvdResult!T(vt, s, u); //transposed
 }
