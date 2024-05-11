@@ -1230,7 +1230,7 @@ Returns: error code from CBlas
 {
     
     size_t info;
-    auto svdresult = svdImpl!(T, algorithm, kind)(a, info, slim);
+    auto svdresult = svd!(T, algorithm, kind)(a, info, slim);
     
     enum msg = (algorithm == "gesvd" ? "svd: DBDSDC did not converge, updating process failed" : "svd: DBDSQR did not converge");
     enforce!("svd: " ~ msg)(!info);
@@ -1238,7 +1238,7 @@ Returns: error code from CBlas
     return svdresult; //transposed
 }
 
-@safe pure @nogc nothrow SvdResult!T svdImpl
+@safe pure @nogc nothrow SvdResult!T svd
 (
     T,
     string algorithm = "gesvd",
@@ -1306,7 +1306,7 @@ Returns: error code from CBlas
     return SvdResult!T(vt, s, u); //transposed
 }
 
-@safe pure @nogc nothrow SvdResult!T svd
+@safe pure SvdResult!T svd
 (
     T,
     string algorithm = "gesvd",
@@ -2073,7 +2073,7 @@ Params:
     tolerance = The computation is based on SVD and any singular values less than tolerance are treated as zero.
 Returns: Moore-Penrose pseudoinverse matrix
 +/
-@safe pure @nogc nothrow
+@safe pure @nogc
 Slice!(RCI!T, 2)
     pinv(T, SliceKind kind)(Slice!(const(T)*, 2, kind) matrix, double tolerance = double.nan)
 {
@@ -2081,15 +2081,22 @@ Slice!(RCI!T, 2)
     import std.math: nextUp;
 
     size_t info;
-    bool lowApiExecuted;
 
-    auto svd = svdImpl(matrix, info, lowApiExecuted);
+    auto result = pinv(matrix, info, tolerance);
 
-    if(lowApiExecuted)
-    {
-        enum msg ="pinv: pinv was not successful due to a convergence issue during SVD calculation.";
-        assert(!info,  msg);
-    }
+    enforce!"pinv: pinv was not successful due to a convergence issue during SVD calculation."(!info);
+
+    return result;
+}
+
+@safe pure @nogc nothrow
+Slice!(RCI!T, 2)
+    pinv(T, SliceKind kind)(Slice!(const(T)*, 2, kind) matrix, out size_t info, double tolerance = double.nan)
+{
+    import mir.algorithm.iteration: find, each;
+    import std.math: nextUp;
+
+    auto svd = svd(matrix, info, No.slim);
 
     if (tolerance != tolerance)
     {
@@ -2110,7 +2117,7 @@ Slice!(RCI!T, 2)
     return v.mtimes(ut);
 }
 
-@safe pure @nogc nothrow
+@safe pure
 Slice!(RCI!T, 2) pinv
 (
     T,
@@ -2119,9 +2126,24 @@ Slice!(RCI!T, 2) pinv
     auto ref scope const Slice!(RCI!T,2,kind) matrix,
     double tolerance = double.nan
 )
-{
+{   
     auto matrixScope = matrix.lightScope.lightConst;
     return pinv(matrixScope, tolerance); 
+}
+
+@safe pure @nogc nothrow
+Slice!(RCI!T, 2) pinv
+(
+    T,
+    SliceKind kind,
+)(
+    auto ref scope const Slice!(RCI!T,2,kind) matrix,
+    out size_t info,
+    double tolerance = double.nan
+)
+{   
+    auto matrixScope = matrix.lightScope.lightConst;
+    return pinv(matrixScope, info, tolerance); 
 }
 
 @safe pure
